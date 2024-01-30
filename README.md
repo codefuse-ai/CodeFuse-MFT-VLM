@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-	<center><h3>[**简体中文**](README_CN.md) [**HuggingFace**](https://huggingface.co/codefuse-ai/CodeFuse-VLM-14B) [**ModelScope**](https://modelscope.cn/models/ss41979310/CodeFuse-VLM-14B/summary) </h3></center>
+	<center>[**简体中文**](README_CN.md) [**HuggingFace**](https://huggingface.co/codefuse-ai/CodeFuse-VLM-14B) [**ModelScope**](https://modelscope.cn/models/ss41979310/CodeFuse-VLM-14B/summary) </center>
 </div>
 
 
