@@ -1,9 +1,7 @@
-<p align="center">
-## CodeFuse-VLM
-</p>
-<p align="center">
+# CodeFuse-VLM
+
 [**简体中文**](README_CN.md) [**HuggingFace**](https://huggingface.co/codefuse-ai/CodeFuse-VLM-14B) [**ModelScope**](https://modelscope.cn/models/ss41979310/CodeFuse-VLM-14B/summary) 
-</p>
+
 
 
 CodeFuse-VLM is a Multimodal LLM(MLLM) framework that provides users with multiple vision encoders, multimodal alignment adapters, and LLMs. Through CodeFuse-VLM framework, users are able to customize their own MLLM model to adapt their own tasks.
