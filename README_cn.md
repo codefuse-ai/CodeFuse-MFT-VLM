@@ -1,12 +1,4 @@
-<div align="center">
-  <center><h1>CodeFuse-VLM</h1></center>
-</div>
-
-<div align="center">
-
-[**English** ](https://github.com/codefuse-ai/CodeFuse-MFT-VLM/blob/master/README.md)| [**HuggingFace** ](https://huggingface.co/codefuse-ai/CodeFuse-VLM-14B)|[ **ModelScope** ](https://modelscope.cn/models/ss41979310/CodeFuse-VLM-14B/summary)
-</div>
-
+## CodeFuse-VLM
 CodeFuse-VLM 是一个多模态大语言模型框架，该框架为用户提供多种视觉编码器，模态对齐模块和大语言模型的选择，以适配用户对不同任务的需求。
 
 随着huggingface开源社区的不断更新，会有更多的vision encoder 和 LLM 底座发布，这些vision encoder 和 LLM底座都有各自的强项，例如 code-llama 适合生成代码类任务，但是不适合生成中文类的任务；因此我们搭建了CodeFuse-VLM 框架，支持多种视觉模型和语言大模型，使得CodeFuse-VLM可以适应不同种类的任务。
@@ -26,8 +18,6 @@ Qwen-VL | 60.6 | 56.7 | 78.2 | 57.5 | 63.8 | 38.9
 CodeFuse-VLM-14B | 75.7 | 69.8 | 79.3 | 59.4 | 63.9 | 45.3
 
 我们的模型在MMBenchmark 多模态大模型榜单上取得了很高的排名: https://mmbench.opencompass.org.cn/leaderboard
-
-
 
 这是我们模型的展示视频
 
@@ -69,7 +59,22 @@ OCR VQA (Downsampled) | OCR and VQA | 500,000
 请执行 sh scripts/finetune.sh 或者 sh scripts/finetune\_multinode.sh
 
 ## Evaluation
-请执行 llava/eval/ 当中的python脚本
+请执行 llava/eval/ 当中的python脚本. 可以通过下面的代码来加载我们预训练的CodeFuse-VLM-14B:
+
+```
+import os
+from llava.model.builder import load_mixed_pretrained_model
+
+model_path = '/pretrained/model/path'
+tokenizer, model, image_processor, context_len = load_mixed_pretrained_model(model_path, None, 'qwen-vl-14b', os.path.join(model_path, 'Qwen-VL-visual'), 'cross_attn', os.path.join(model_path, 'mm_projector/mm_projector.bin'))
+```
+
+您也可以先运行下面的脚本来合并各个模型组件：scripts/merge\_qwen\_vl\_weights.sh，然后通过下面的代码加载合并后的模型：
+```
+from llava.model import LlavaQWenForCausalLM
+
+model = LlavaQWenForCausalLM.from_pretrained('/path/to/our/pretrained/model')
+```
 
 ## CodeFuse-VLM 产品视频
 这是我们模型支持的产品的视频

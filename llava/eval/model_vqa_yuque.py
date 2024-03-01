@@ -28,16 +28,13 @@ def get_chunk(lst, n, k):
     return chunks[k]
 
 
-#def eval_model(args, questions, start, end, ans_file, lock):
 def eval_model(args, questions, start, end, ans_file):
     # Model
     disable_torch_init()
     model_path = os.path.expanduser(args.model_path)
-    #model_name = get_model_name_from_path(model_path) + "-lora"
-    model_name = "yuque_qwen-7b-lora"
-    #tokenizer, model, image_processor, context_len = load_pretrained_model(model_path, args.model_base, model_name)
-    #tokenizer, model, image_processor, context_len = load_pretrained_model_custom_proj(model_path, args.model_base, model_name, args.mm_projector)
-    tokenizer, model, image_processor, context_len = load_mixed_pretrained_model(model_path, args.model_base, model_name, args.vision_tower, args.mm_projector_type, args.mm_projector)
+    model_name = get_model_name_from_path(model_path)
+    # tokenizer, model, image_processor, context_len = load_mixed_pretrained_model(model_path, args.model_base, model_name, args.vision_tower, args.mm_projector_type, args.mm_projector)
+    tokenizer, model, image_processor, context_len = load_pretrained_model(model_path, args.model_base, model_name)
     tokenizer.pad_token_id = tokenizer.eod_id
     model = model.cuda()
 
@@ -48,20 +45,11 @@ def eval_model(args, questions, start, end, ans_file):
         image_file = line["image"]
         qs = line["conversations"][0]["value"].replace("{}\n".format(DEFAULT_IMAGE_TOKEN), "")
         cur_prompt = qs
-        #if model.config.mm_use_im_start_end:
-        #qs = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + qs
-        #else:
-        #    qs = DEFAULT_IMAGE_TOKEN + '\n' + qs
-
-        #conv = conv_templates[args.conv_mode].copy()
-        #conv.append_message(conv.roles[0], qs)
-        #conv.append_message(conv.roles[1], None)
-        #prompt = conv.get_prompt()
 
         ori_ir = line["conversations"][1]["value"]
 
         for sentence in line['conversations']:
-            if "Qwen" in args.model_base:
+            if "qwen" in args.model_path.lower():
                 if sentence['from']=='human':
                     if DEFAULT_IMAGE_TOKEN in sentence['value']:
                         content = "<|im_start|>user\n" + "Picture 1:<img></img>\n" + sentence['value'].strip(DEFAULT_IMAGE_TOKEN) + "<|im_end|>\n"
@@ -92,7 +80,6 @@ def eval_model(args, questions, start, end, ans_file):
         image = Image.open(os.path.join(args.image_folder, image_file)).convert('RGB')
         image_tensor = image_processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
         
-        #stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
         stop_str = tokenizer.pad_token
         keywords = [stop_str]
         stopping_criteria = KeywordsStoppingCriteria(keywords, tokenizer, input_ids)
@@ -105,8 +92,6 @@ def eval_model(args, questions, start, end, ans_file):
                 temperature=0.2,
                 top_p=0.3,
                 top_k=0,
-                #num_beams=1,
-                # no_repeat_ngram_size=3,
                 max_new_tokens=2048,
                 return_dict_in_generate=False,
                 use_cache=True)
@@ -116,7 +101,6 @@ def eval_model(args, questions, start, end, ans_file):
         if n_diff_input_output > 0:
             print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
         output_text = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
-        #import pdb; pdb.set_trace()
 
         output_text = output_text.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("\n", "")
         first_curly_bracket_idx = None
@@ -126,40 +110,8 @@ def eval_model(args, questions, start, end, ans_file):
                 break
         if first_curly_bracket_idx is not None:
             output_text = output_text[i:]
-        #import pdb; pdb.set_trace()
-
-        #input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
-
-        #stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
-        #keywords = [stop_str]
-        #stopping_criteria = KeywordsStoppingCriteria(keywords, tokenizer, input_ids)
-
-        #with torch.inference_mode():
-        #    output_ids = model.generate(
-        #        input_ids,
-        #        images=image_tensor.unsqueeze(0).half().cuda(),
-        #        do_sample=True,
-        #        temperature=args.temperature,
-        #        top_p=args.top_p,
-        #        num_beams=args.num_beams,
-        #        # no_repeat_ngram_size=3,
-        #        max_new_tokens=2048,
-        #        use_cache=True)
-        
-
-
-        #input_token_len = input_ids.shape[1]
-        #n_diff_input_output = (input_ids != output_ids[:, :input_token_len]).sum().item()
-        #if n_diff_input_output > 0:
-        #    print(f'[Warning] {n_diff_input_output} output_ids are not the same as the input_ids')
-        #outputs = tokenizer.batch_decode(output_ids[:, input_token_len:], skip_special_tokens=True)[0]
-        #outputs = outputs.strip()
-        #if outputs.endswith(stop_str):
-        #    outputs = outputs[:-len(stop_str)]
-        #outputs = outputs.strip()
 
         ans_id = shortuuid.uuid()
-        #with lock:
         ans_file.write(json.dumps({"question_id": idx,
                                        "from": line["from"],
                                        "prompt": cur_prompt,
@@ -170,6 +122,7 @@ def eval_model(args, questions, start, end, ans_file):
                                        "metadata": {}}) + "\n")
         ans_file.flush()
         index += 1
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -204,19 +157,5 @@ if __name__ == "__main__":
     ans_file = open(answers_file, "w")
 
     eval_model(args, questions, 0, 100, ans_file)
-
-    #threads = []
-    #lock = threading.Lock()
-    #for i in range(thread_num):
-    #    start = i * step
-    #    end = n if i == 3 else (i + 1) * step
-    #    t = threading.Thread(target=eval_model, args=(args, questions, start, end, ans_file, lock))
-    #    threads.append(t)
-
-    #for t in threads:
-    #    t.start()
-
-    #for t in threads:
-    #    t.join()
 
     ans_file.close()

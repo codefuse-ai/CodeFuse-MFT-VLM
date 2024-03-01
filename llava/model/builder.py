@@ -33,6 +33,7 @@ class VisionArguments:
     mm_projector_type: Optional[str] = field(default="linear")
     pretrain_mm_mlp_adapter: Optional[str] = field(default="")
 
+
 def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, load_4bit=False, device_map="auto"):
     kwargs = {"device_map": device_map}
 
@@ -106,26 +107,29 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
         elif model_base is not None:
             # this may be mm projector only
             print('Loading LLaVA from base model...')
+            tokenizer = AutoTokenizer.from_pretrained(model_base, trust_remote_code=True, use_fast=True)
+            cfg_pretrained = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
             if 'mpt' in model_name.lower():
                 if not os.path.isfile(os.path.join(model_path, 'configuration_mpt.py')):
                     shutil.copyfile(os.path.join(model_base, 'configuration_mpt.py'), os.path.join(model_path, 'configuration_mpt.py'))
-                tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=True)
-                cfg_pretrained = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
                 model = LlavaMPTForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
+            if "qwen" in model_name or "Qwen" in model_base:
+                if not os.path.isfile(os.path.join(model_path, 'configuration_qwen.py')):
+                    shutil.copyfile(os.path.join(model_base, 'configuration_qwen.py'), os.path.join(model_path, 'configuration_qwen.py'))
+                model = LlavaQWenForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
             else:
-                tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
-                cfg_pretrained = AutoConfig.from_pretrained(model_path)
                 model = LlavaLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
 
             mm_projector_weights = torch.load(os.path.join(model_path, 'mm_projector.bin'), map_location='cpu')
             mm_projector_weights = {k: v.to(torch.float16) for k, v in mm_projector_weights.items()}
             model.load_state_dict(mm_projector_weights, strict=False)
         else:
+            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=True)
             if 'mpt' in model_name.lower():
-                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
                 model = LlavaMPTForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+            if "qwen" in model_name.lower():
+                model = LlavaQWenForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True)
             else:
-                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
                 model = LlavaLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
     else:
         # Load language model
@@ -164,7 +168,12 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
             vision_tower.load_model()
         vision_tower.to(device='cuda', dtype=torch.float16)
         image_processor = vision_tower.image_processor
-        
+    elif 'qwen' in model_name.lower():
+        vision_tower = model.get_vision_tower()
+        if not vision_tower.is_loaded:
+            vision_tower.load_model()
+        # vision_tower.to(device='cuda', dtype=torch.float16)
+        image_processor = vision_tower.image_processor
 
     if hasattr(model.config, "max_sequence_length"):
         context_len = model.config.max_sequence_length
@@ -251,11 +260,12 @@ def load_pretrained_model_custom_proj(model_path, model_base, model_name, mm_pro
             mm_projector_weights = {k: v.to(torch.float16) for k, v in mm_projector_weights.items()}
             model.load_state_dict(mm_projector_weights, strict=False)
         else:
+            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=True)
             if 'mpt' in model_name.lower():
-                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
                 model = LlavaMPTForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+            if "qwen" in model_name.lower():
+                model = LlavaQWenForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
             else:
-                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
                 model = LlavaLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
     else:
         # Load language model
@@ -303,6 +313,7 @@ def load_pretrained_model_custom_proj(model_path, model_base, model_name, mm_pro
 
     return tokenizer, model, image_processor, context_len
 
+
 def load_mixed_pretrained_model(model_path, model_base, model_name, vision_tower_path, mm_projector_type, mm_projector_path, load_8bit=False, load_4bit=False, device_map="auto"):
     kwargs = {"device_map": device_map}
     vision_args = VisionArguments()
@@ -328,9 +339,8 @@ def load_mixed_pretrained_model(model_path, model_base, model_name, vision_tower
         if 'lora' in model_name.lower() and model_base is None:
             warnings.warn('There is `lora` in model name but no `model_base` is provided. If you are loading a LoRA model, please provide the `model_base` argument. Detailed instruction: https://github.com/haotian-liu/LLaVA#launch-a-model-worker-lora-weights-unmerged.')
         if 'lora' in model_name.lower() and model_base is not None:
-            
             if "qwen" in model_name or "Qwen" in model_base:
-                tokenizer = transformers.AutoTokenizer.from_pretrained(
+                tokenizer = AutoTokenizer.from_pretrained(
                 model_base,
                 trust_remote_code=True,
                 cache_dir=None,
@@ -352,8 +362,7 @@ def load_mixed_pretrained_model(model_path, model_base, model_name, vision_tower
                     cache_dir=None,
                     use_safetensors=False,
                 )
-
-            else:    
+            else:
                 lora_cfg_pretrained = AutoConfig.from_pretrained(model_path)
                 model = LlavaLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=lora_cfg_pretrained, **kwargs)
             token_num, tokem_dim = model.lm_head.out_features, model.lm_head.in_features
@@ -382,28 +391,32 @@ def load_mixed_pretrained_model(model_path, model_base, model_name, vision_tower
             print('Model is loaded...')
             print("Loading MM projector....")
         elif model_base is not None:
-            # this may be mm projector only
             print('Loading LLaVA from base model...')
-            if 'mpt' in model_name.lower():
-                if not os.path.isfile(os.path.join(model_path, 'configuration_mpt.py')):
-                    shutil.copyfile(os.path.join(model_base, 'configuration_mpt.py'), os.path.join(model_path, 'configuration_mpt.py'))
-                tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=True)
-                cfg_pretrained = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
-                model = LlavaMPTForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
+            tokenizer = AutoTokenizer.from_pretrained(model_base, trust_remote_code=True, use_fast=False)
+            cfg_pretrained = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+            if "qwen" in model_name or "Qwen" in model_base:
+                # For qwen, its mm projector is loaded together with the vision tower.
+                if not os.path.isfile(os.path.join(model_path, 'configuration_qwen.py')):
+                    shutil.copyfile(os.path.join(model_base, 'configuration_qwen.py'), os.path.join(model_path, 'configuration_qwen.py'))
+                model = LlavaQWenForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained)
             else:
-                tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
-                cfg_pretrained = AutoConfig.from_pretrained(model_path)
-                model = LlavaLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
+                if 'mpt' in model_name.lower():
+                    if not os.path.isfile(os.path.join(model_path, 'configuration_mpt.py')):
+                        shutil.copyfile(os.path.join(model_base, 'configuration_mpt.py'), os.path.join(model_path, 'configuration_mpt.py'))
+                    model = LlavaMPTForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
+                else:
+                    model = LlavaLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
 
-            mm_projector_weights = torch.load(os.path.join(model_path, 'mm_projector.bin'), map_location='cpu')
-            mm_projector_weights = {k: v.to(torch.float16) for k, v in mm_projector_weights.items()}
-            model.load_state_dict(mm_projector_weights, strict=False)
+                mm_projector_weights = torch.load(os.path.join(model_path, 'mm_projector.bin'), map_location='cpu')
+                mm_projector_weights = {k: v.to(torch.float16) for k, v in mm_projector_weights.items()}
+                model.load_state_dict(mm_projector_weights, strict=False)
         else:
+            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=True)
             if 'mpt' in model_name.lower():
-                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
                 model = LlavaMPTForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+            if "qwen" in model_name.lower():
+                model = LlavaQWenForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True)
             else:
-                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
                 model = LlavaLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
     else:
         # Load language model
@@ -447,6 +460,7 @@ def load_mixed_pretrained_model(model_path, model_base, model_name, vision_tower
         vision_tower = model.get_vision_tower()
         if not vision_tower.is_loaded:
             vision_tower.load_model()
+        # vision_tower.to(device='cuda', dtype=torch.float16)
         image_processor = vision_tower.image_processor
 
     if hasattr(model.config, "max_sequence_length"):
